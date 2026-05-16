@@ -32,6 +32,7 @@
 #include "pid/pid_impl.h"
 #include "stm32_sw_i2c.h"
 #include "dwt_stm32_delay.h"
+#include "state_machine.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -223,6 +224,14 @@ int main(void)
               NULL,
               CONTROL_TASK_PRIORITY,
               NULL
+  );
+
+  xTaskCreate(State_Machine_Task,
+			  STATE_MACHINE_TASK_NAME,
+			  STATE_MACHINE_TASK_STACK_SIZE / sizeof(StackType_t),
+			  NULL,
+			  STATE_MACHINE_TASK_PRIORITY,
+			  NULL
   );
   /* USER CODE END RTOS_THREADS */
 

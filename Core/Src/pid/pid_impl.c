@@ -8,6 +8,7 @@
 #include "FreeRTOS.h"
 #include "task.h"
 #include "main.h"
+#include "state_machine.h"
 
 extern TIM_HandleTypeDef htim2;
 
@@ -27,6 +28,17 @@ void Control_Task(void *pvParameters)
     control_init(CONTROL_TASK_DELAY_MS / 1000.0f);
     TickType_t lastWakeTime = xTaskGetTickCount();
     while (1) {
+        if (!StateMachine_PIDEnabled())
+        {
+            __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, 1500);
+            __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_2, 1500);
+            __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_3, 1500);
+            __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_4, 1500);
+            vTaskDelayUntil(&lastWakeTime, pdMS_TO_TICKS(CONTROL_TASK_DELAY_MS));
+            continue;
+        }
+
+
         FusionEuler euler;
         Fusion_GetEuler(&euler);
         Sensor_Master_Data_t data;
