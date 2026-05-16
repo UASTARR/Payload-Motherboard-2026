@@ -1,5 +1,6 @@
 #include "sensors/icm40609d.h"
 #include <string.h>
+#include <stdio.h>
 
 extern SPI_HandleTypeDef hspi1;
 
@@ -26,32 +27,33 @@ static void ICM_WriteReg(uint8_t reg, uint8_t val)
 
 static void ICM_ReadRegs(uint8_t reg, uint8_t *out, uint8_t len)
 {
-    uint8_t tx[16] = {0};
-    uint8_t rx[16] = {0};
-    tx[0] = reg | 0x80;
+	uint8_t addr = reg | 0x80;
+
     HAL_GPIO_WritePin(IMU_nCS_GPIO_Port, IMU_nCS_Pin, GPIO_PIN_RESET);
-    HAL_SPI_TransmitReceive(&hspi1, tx, rx, len + 1, HAL_MAX_DELAY);
+
+    HAL_SPI_Transmit(&hspi1, &addr, 1, HAL_MAX_DELAY);
+
+    HAL_SPI_Receive(&hspi1, out, len, HAL_MAX_DELAY);
+
     HAL_GPIO_WritePin(IMU_nCS_GPIO_Port, IMU_nCS_Pin, GPIO_PIN_SET);
-    memcpy(out, &rx[1], len);
 }
 
 void ICM40609D_Init(void)
 {
     ICM_WriteReg(ICM_REG_DEVICE_CONFIG, 0x01);
     HAL_Delay(2);
-
     uint8_t who = 0;
     ICM_ReadRegs(ICM_REG_WHO_AM_I, &who, 1);
     if (who != ICM_WHO_AM_I_VAL) {
-    	printf("ERROR: ICM40609 WHOAMI=%d\r\n", who);
+    	// printf("ERROR: ICM40609 WHOAMI=%d\r\n", who);
     }
 
-    ICM_WriteReg(ICM_REG_GYRO_CONFIG0, (0x01 << 5) | 0x06);
+    ICM_WriteReg(ICM_REG_GYRO_CONFIG0, (0x00 << 5) | (0x000 << 3) | 0x06);
 
-    ICM_WriteReg(ICM_REG_ACCEL_CONFIG0, (0x00 << 5) | 0x06);
+    ICM_WriteReg(ICM_REG_ACCEL_CONFIG0, (0x01 << 5) | 0x06);
 
     ICM_WriteReg(ICM_REG_PWR_MGMT0, 0x0F);
-    HAL_Delay(1);
+    HAL_Delay(10);
 }
 
 void ICM40609D_Read_All(ICM40609D_Data_t *data)

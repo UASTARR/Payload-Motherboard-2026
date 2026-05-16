@@ -229,7 +229,8 @@ _Bool I2C_receive(uint8_t address, uint8_t reg[], uint8_t *data, uint8_t reg_siz
         {
             for (int j = 0; j < size; j++)
             {
-                *data++ = I2C_read_byte(false, false); // read data
+            	_Bool send_ack = (j < (size - 1));
+                *data++ = I2C_read_byte(send_ack, false); // read data
             }
             I2C_stop_cond();
             return true;

@@ -1,0 +1,5 @@
+../Core/Src/sensors/sensor_master.c:6:9:Sensor_Master_Init	2
+../Core/Src/sensors/sensor_master.c:16:16:Sensor_Master_Read_All	2
+../Core/Src/sensors/sensor_master.c:30:9:Sensor_Master_Get	2
+../Core/Src/sensors/sensor_master.c:40:6:Sensor_Master_Task	1
+../Core/Src/sensors/sensor_master.c:49:6:Sensor_Master_Print_All	1

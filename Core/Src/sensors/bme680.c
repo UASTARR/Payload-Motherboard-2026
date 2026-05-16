@@ -48,7 +48,6 @@ static void bme68x_delay_us(uint32_t period, void *intf_ptr)
 
 void BME680_Init(void)
 {
-	uint8_t status = 0;
     bme.read     = bme68x_i2c_read;
     bme.write    = bme68x_i2c_write;
     bme.delay_us = bme68x_delay_us;
@@ -56,8 +55,7 @@ void BME680_Init(void)
     bme.intf_ptr = &dev_addr;
     bme.amb_temp = 25;
 
-    status = bme68x_init(&bme);
-    printf("bme68x_init status: %d\r\n", status);
+    bme68x_init(&bme);
     struct bme68x_conf conf = {0};
     bme68x_get_conf(&conf, &bme);
     conf.os_temp = BME68X_OS_2X;
@@ -65,15 +63,13 @@ void BME680_Init(void)
     conf.os_hum  = BME68X_OS_1X;
     conf.filter  = BME68X_FILTER_OFF;
     conf.odr     = BME68X_ODR_NONE;
-    status = bme68x_set_conf(&conf, &bme);
-    printf("bme68x_set_conf status: %d\r\n", status);
+    bme68x_set_conf(&conf, &bme);
 
     struct bme68x_heatr_conf heatr = {0};
     heatr.enable     = BME68X_ENABLE;
     heatr.heatr_temp = 320;
     heatr.heatr_dur  = heatr_dur_ms;
-    status = bme68x_set_heatr_conf(BME68X_FORCED_MODE, &heatr, &bme);
-    printf("bme_set_heatr_conf status: %d\r\n", status);
+    bme68x_set_heatr_conf(BME68X_FORCED_MODE, &heatr, &bme);
 }
 
 void BME680_Read_All(BME680_Data_t *data)

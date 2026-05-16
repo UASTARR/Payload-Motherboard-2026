@@ -38,4 +38,4 @@ void SGP41_Read_All(SGP41_Data_t *data) {
     // need to use GasIndexAlgorithm from Sensiron to get actual values
     data->TVOC = (float)sraw_voc;
     data->NOx  = (float)sraw_nox;
-} 
+}

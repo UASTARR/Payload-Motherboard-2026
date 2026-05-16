@@ -1,5 +1,8 @@
 #include "sensors/mmc5983ma.h"
 #include <string.h>
+#include <stdio.h>
+#include "FreeRTOS.h"
+#include "task.h"
 
 extern SPI_HandleTypeDef hspi1;
 
@@ -48,12 +51,19 @@ void MMC5983MA_Init(void)
 {
     // Software reset
     MMC_WriteReg(MMC_CTRL1, MMC_SW_RST);
-    HAL_Delay(10);
+
+	//Test Product ID
+	uint8_t productID;
+	MMC_ReadRegs(MMC_PRODUCT_ID,&productID,1);
+	if (productID!=0x30) {
+		// printf("MMC Init Error");
+	}
+
 
     // SET operation to remove residual magnetization
-    MMC_WriteReg(MMC_CTRL0, MMC_SET_BIT);
-    HAL_Delay(1);
-
+	MMC_WriteReg(MMC_CTRL0, 0x10); // RESET
+	MMC_WriteReg(MMC_CTRL0, 0x08); // SET
+	MMC_WriteReg(MMC_CTRL1, 0x00);
     // Enable auto set/reset and continuous 100Hz measurement (CTRL2)
     // Bits [2:0] = CM_FREQ: 001 = 1Hz, 010 = 10Hz, 011 = 20Hz,
     //              100 = 50Hz, 101 = 100Hz
@@ -62,8 +72,8 @@ void MMC5983MA_Init(void)
 
 void MMC5983MA_Read_All(MMC5983MA_Data_t *data)
 {
-    // Trigger a single measurement (or rely on continuous mode from Init)
-    MMC_WriteReg(MMC_CTRL0, MMC_TM_M | MMC_TM_T);
+    // Trigger a single measurement
+    MMC_WriteReg(MMC_CTRL0, MMC_TM_M);
 
     // Poll until measurement done (STATUS bit 0 = Meas_M_Done)
     uint8_t status = 0;
@@ -84,6 +94,14 @@ void MMC5983MA_Read_All(MMC5983MA_Data_t *data)
     data->x = ((float)x_raw - 131072.0f) / MMC_SENSITIVITY;
     data->y = ((float)y_raw - 131072.0f) / MMC_SENSITIVITY;
     data->z = ((float)z_raw - 131072.0f) / MMC_SENSITIVITY;
+
+    MMC_WriteReg(MMC_CTRL0, MMC_TM_T);
+
+    status = 0;
+    timeout = HAL_GetTick() + 10;
+    do {
+    	MMC_ReadRegs(MMC_STATUS, &status, 1);
+    } while (!(status & 0x02) && HAL_GetTick() < timeout);
 
     // Read temperature: 1 byte, 0.8°C/LSB, offset at 0 = -75°C
     uint8_t t_raw = 0;

@@ -18,6 +18,7 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "cmsis_os.h"
 #include "usb_device.h"
 
 /* Private includes ----------------------------------------------------------*/
@@ -26,11 +27,8 @@
 
 #include "usbd_cdc_if.h"
 
-#include "sensors/bme680.h"
-#include "sensors/ms5611.h"
-#include "sensors/sgp41.h"
-#include "sensors/icm40609d.h"
-#include "sensors/mmc5983ma.h"
+#include "sensors/sensor_master.h"
+#include "fusion.h"
 #include "stm32_sw_i2c.h"
 #include "dwt_stm32_delay.h"
 /* USER CODE END Includes */
@@ -68,6 +66,13 @@ TIM_HandleTypeDef htim3;
 
 UART_HandleTypeDef huart4;
 
+/* Definitions for defaultTask */
+osThreadId_t defaultTaskHandle;
+const osThreadAttr_t defaultTask_attributes = {
+  .name = "defaultTask",
+  .stack_size = 256 * 4,
+  .priority = (osPriority_t) osPriorityNormal,
+};
 /* USER CODE BEGIN PV */
 
 /* USER CODE END PV */
@@ -86,13 +91,15 @@ static void MX_TIM2_Init(void);
 static void MX_TIM3_Init(void);
 static void MX_UART4_Init(void);
 static void MX_TIM1_Init(void);
+void StartDefaultTask(void *argument);
+
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
+static osMutexId_t uart_mutex; // Mutex for printf
 /* USER CODE END 0 */
 
 /**
@@ -130,40 +137,94 @@ int main(void)
   MX_ADC2_Init();
   MX_CAN1_Init();
   MX_I2C1_Init();
-//  MX_SDMMC1_SD_Init();
+  // MX_SDMMC1_SD_Init();
   MX_SPI1_Init();
   MX_SPI2_Init();
   MX_TIM2_Init();
   MX_TIM3_Init();
   MX_UART4_Init();
   MX_TIM1_Init();
-  MX_USB_DEVICE_Init();
   /* USER CODE BEGIN 2 */
-  HAL_Delay(2000);
   // set SPI CS pins to high
   HAL_GPIO_WritePin(MAG_nCS_GPIO_Port, MAG_nCS_Pin, GPIO_PIN_SET);
   HAL_GPIO_WritePin(IMU_nCS_GPIO_Port, IMU_nCS_Pin, GPIO_PIN_SET);
 
-  // TODO: Remove
-  // delay for 5 seconds so we can reset and check init statuses
-  HAL_Delay(5000);
+  HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_1);
+  HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_2);
+  HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_3);
+  HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_4);
+  __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, 1500);
+  __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_2, 1500);
+  __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_3, 1500);
+  __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_4, 1500);
 
   // (needed for sw I2C)
   DWT_Delay_Init();
   // initialize software I2C
   I2C_init();
-  // initialize sensors
+
+  // initialize sensors (note - these need to be initialized
+  // before Sensor_Master_Init is called because xSemaphoreCreateMutex
+  // does stuff that blocks TIM5's interrupt and causes HAL_Delay to not work)
   BME680_Init();
   MS5611_Init();
   SGP41_Init();
   ICM40609D_Init();
   MMC5983MA_Init();
-  printf("beast mode activated\r\n");
 
-  // TODO: Remove
-  // delay for 5 seconds so we can read init statuses
-  HAL_Delay(5000);
   /* USER CODE END 2 */
+
+  /* Init scheduler */
+  osKernelInitialize();
+
+  /* USER CODE BEGIN RTOS_MUTEX */
+  uart_mutex = osMutexNew(NULL);
+  Sensor_Master_Init();
+  Fusion_Init();
+  /* USER CODE END RTOS_MUTEX */
+
+  /* USER CODE BEGIN RTOS_SEMAPHORES */
+  /* add semaphores, ... */
+  /* USER CODE END RTOS_SEMAPHORES */
+
+  /* USER CODE BEGIN RTOS_TIMERS */
+  /* start timers, add new ones, ... */
+  /* USER CODE END RTOS_TIMERS */
+
+  /* USER CODE BEGIN RTOS_QUEUES */
+  /* add queues, ... */
+  /* USER CODE END RTOS_QUEUES */
+
+  /* Create the thread(s) */
+  /* creation of defaultTask */
+  defaultTaskHandle = osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
+
+  /* USER CODE BEGIN RTOS_THREADS */
+  xTaskCreate(Sensor_Master_Task,
+              SENSOR_MASTER_TASK_NAME,
+              SENSOR_MASTER_TASK_STACK_SIZE / sizeof(StackType_t),
+              NULL,
+              SENSOR_MASTER_TASK_PRIORITY,
+              NULL
+  );
+
+  xTaskCreate(Fusion_Task,
+              FUSION_TASK_NAME,
+              FUSION_TASK_STACK_SIZE / sizeof(StackType_t),
+              NULL,
+              FUSION_TASK_PRIORITY,
+              NULL
+  );
+  /* USER CODE END RTOS_THREADS */
+
+  /* USER CODE BEGIN RTOS_EVENTS */
+  /* add events, ... */
+  /* USER CODE END RTOS_EVENTS */
+
+  /* Start scheduler */
+  osKernelStart();
+
+  /* We should never get here as control is now taken by the scheduler */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
@@ -172,42 +233,6 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-    BME680_Data_t   bme  = {0};
-    MS5611_Data_t   ms   = {0};
-    SGP41_Data_t    sgp  = {0};
-    ICM40609D_Data_t icm = {0};
-    MMC5983MA_Data_t mag = {0};
-
-    BME680_Read_All(&bme);
-    MS5611_Read_All(&ms);
-    SGP41_Read_All(&sgp);
-    ICM40609D_Read_All(&icm);
-    MMC5983MA_Read_All(&mag);
-
-    printf("--- BME680 ---\r\n");
-    printf("  Temp:  %.2f C\r\n",  bme.temperature);
-    printf("  Press: %.2f hPa\r\n", bme.pressure);
-    printf("  Hum:   %.2f %%\r\n", bme.humidity);
-    printf("  Gas:   %.0f ohm\r\n", bme.gas);
-
-    printf("--- MS5611 ---\r\n");
-    printf("  Press: %.2f hPa\r\n", ms.pressure);
-    printf("  Alt:   %.2f m\r\n",   ms.altitude);
-
-    printf("--- SGP41 ---\r\n");
-    printf("  TVOC:  %.0f raw\r\n", sgp.TVOC);
-    printf("  NOx:   %.0f raw\r\n", sgp.NOx);
-
-    printf("--- ICM-40609D ---\r\n");
-    printf("  Accel: %.3f  %.3f  %.3f g\r\n",   icm.accel_x, icm.accel_y, icm.accel_z);
-    printf("  Gyro:  %.2f  %.2f  %.2f dps\r\n", icm.gyro_x,  icm.gyro_y,  icm.gyro_z);
-    printf("  Temp:  %.1f C\r\n", icm.temp);
-
-    printf("--- MMC5983MA ---\r\n");
-    printf("  Mag:   %.4f  %.4f  %.4f G\r\n", mag.x, mag.y, mag.z);
-    printf("  Temp:  %.1f C\r\n\r\n", mag.temp);
-
-    HAL_Delay(500);
   }
   /* USER CODE END 3 */
 }
@@ -457,8 +482,8 @@ static void MX_SPI1_Init(void)
   hspi1.Init.Mode = SPI_MODE_MASTER;
   hspi1.Init.Direction = SPI_DIRECTION_2LINES;
   hspi1.Init.DataSize = SPI_DATASIZE_8BIT;
-  hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
-  hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
+  hspi1.Init.CLKPolarity = SPI_POLARITY_HIGH;
+  hspi1.Init.CLKPhase = SPI_PHASE_2EDGE;
   hspi1.Init.NSS = SPI_NSS_SOFT;
   hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_2;
   hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
@@ -466,7 +491,7 @@ static void MX_SPI1_Init(void)
   hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
   hspi1.Init.CRCPolynomial = 7;
   hspi1.Init.CRCLength = SPI_CRC_LENGTH_DATASIZE;
-  hspi1.Init.NSSPMode = SPI_NSS_PULSE_ENABLE;
+  hspi1.Init.NSSPMode = SPI_NSS_PULSE_DISABLE;
   if (HAL_SPI_Init(&hspi1) != HAL_OK)
   {
     Error_Handler();
@@ -609,6 +634,7 @@ static void MX_TIM2_Init(void)
 
   /* USER CODE END TIM2_Init 0 */
 
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
   TIM_MasterConfigTypeDef sMasterConfig = {0};
   TIM_OC_InitTypeDef sConfigOC = {0};
 
@@ -616,11 +642,20 @@ static void MX_TIM2_Init(void)
 
   /* USER CODE END TIM2_Init 1 */
   htim2.Instance = TIM2;
-  htim2.Init.Prescaler = 0;
+  htim2.Init.Prescaler = 107;
   htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim2.Init.Period = 4294967295;
+  htim2.Init.Period = 19999;
   htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim2, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
   if (HAL_TIM_PWM_Init(&htim2) != HAL_OK)
   {
     Error_Handler();
@@ -821,17 +856,35 @@ static void MX_GPIO_Init(void)
 // redirect printf to CDC / virtual com port
 int _write(int file, char *ptr, int len)
 {
-//   for usb printf
-   CDC_Transmit_FS((uint8_t *)ptr, (uint16_t)len);
-   HAL_Delay(1);
-   return len;
-
-  // for uart/stlink printf
-//  HAL_UART_Transmit(&huart4, (uint8_t *)ptr, (uint16_t)len, HAL_MAX_DELAY);
-//  return len;
+	osMutexAcquire(uart_mutex, osWaitForever);
+	CDC_Transmit_FS((uint8_t *)ptr, (uint16_t)len);
+	// HAL_UART_Transmit(&huart4, (uint8_t *)ptr, (uint16_t)len, HAL_MAX_DELAY);
+	osDelay(1);
+	osMutexRelease(uart_mutex);
+	return len;
 }
 
 /* USER CODE END 4 */
+
+/* USER CODE BEGIN Header_StartDefaultTask */
+/**
+  * @brief  Function implementing the defaultTask thread.
+  * @param  argument: Not used
+  * @retval None
+  */
+/* USER CODE END Header_StartDefaultTask */
+void StartDefaultTask(void *argument)
+{
+  /* init code for USB_DEVICE */
+  MX_USB_DEVICE_Init();
+  /* USER CODE BEGIN 5 */
+  /* Infinite loop */
+  for(;;)
+  {
+    osDelay(1);
+  }
+  /* USER CODE END 5 */
+}
 
  /* MPU Configuration */
 
@@ -860,6 +913,28 @@ void MPU_Config(void)
   /* Enables the MPU */
   HAL_MPU_Enable(MPU_PRIVILEGED_DEFAULT);
 
+}
+
+/**
+  * @brief  Period elapsed callback in non blocking mode
+  * @note   This function is called  when TIM5 interrupt took place, inside
+  * HAL_TIM_IRQHandler(). It makes a direct call to HAL_IncTick() to increment
+  * a global variable "uwTick" used as application time base.
+  * @param  htim : TIM handle
+  * @retval None
+  */
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+  /* USER CODE BEGIN Callback 0 */
+
+  /* USER CODE END Callback 0 */
+  if (htim->Instance == TIM5)
+  {
+    HAL_IncTick();
+  }
+  /* USER CODE BEGIN Callback 1 */
+
+  /* USER CODE END Callback 1 */
 }
 
 /**

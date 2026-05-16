@@ -1,4 +1,4 @@
-../Core/Src/sensors/icm40609d.c:22:13:ICM_WriteReg	1
-../Core/Src/sensors/icm40609d.c:34:13:ICM_ReadRegs	1
-../Core/Src/sensors/icm40609d.c:49:6:ICM40609D_Init	2
-../Core/Src/sensors/icm40609d.c:78:6:ICM40609D_Read_All	1
+../Core/Src/sensors/icm40609d.c:20:13:ICM_WriteReg	1
+../Core/Src/sensors/icm40609d.c:28:13:ICM_ReadRegs	1
+../Core/Src/sensors/icm40609d.c:41:6:ICM40609D_Init	1
+../Core/Src/sensors/icm40609d.c:59:6:ICM40609D_Read_All	1
