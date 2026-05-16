@@ -29,6 +29,7 @@
 
 #include "sensors/sensor_master.h"
 #include "fusion.h"
+#include "pid/pid_impl.h"
 #include "stm32_sw_i2c.h"
 #include "dwt_stm32_delay.h"
 /* USER CODE END Includes */
@@ -213,6 +214,14 @@ int main(void)
               FUSION_TASK_STACK_SIZE / sizeof(StackType_t),
               NULL,
               FUSION_TASK_PRIORITY,
+              NULL
+  );
+
+  xTaskCreate(Control_Task,
+              CONTROL_TASK_NAME,
+              CONTROL_TASK_STACK_SIZE / sizeof(StackType_t),
+              NULL,
+              CONTROL_TASK_PRIORITY,
               NULL
   );
   /* USER CODE END RTOS_THREADS */

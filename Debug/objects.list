@@ -12,6 +12,8 @@
 "./Core/Src/syscalls.o"
 "./Core/Src/sysmem.o"
 "./Core/Src/system_stm32f7xx.o"
+"./Core/Src/pid/pid.o"
+"./Core/Src/pid/pid_impl.o"
 "./Core/Src/sensors/bme680.o"
 "./Core/Src/sensors/bme68x.o"
 "./Core/Src/sensors/icm40609d.o"
